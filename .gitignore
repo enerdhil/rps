@@ -13,6 +13,7 @@ install_manifest.txt
 compile_commands.json
 CTestTestfile.cmake
 _deps
+build/*
 
 ### CMake Patch ###
 # External projects
@@ -40,5 +41,17 @@ _deps
 
 # Go workspace file
 go.work
+
+# Dont push private keys
+*.key
+
+# Dotenv file
+*.env
+
+# rps binary
+rps
+
+# fyne-cross_folder
+fyne-cross/*
 
 # End of https://www.toptal.com/developers/gitignore/api/go,cmake

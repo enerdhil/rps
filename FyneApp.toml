@@ -1,6 +1,6 @@
 [Details]
   Icon = "Icon.png"
-  Name = "RPS"
+  Name = "RPSv2"
   ID = "com.enerdhil.app"
-  Version = "0.0.1"
-  Build = 3
+  Version = "0.1.1"
+  Build = 6
