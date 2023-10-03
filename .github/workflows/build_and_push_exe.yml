@@ -28,4 +28,4 @@ jobs:
       run: go install github.com/fynelabs/selfupdate/cmd/selfupdatectl@latest
 
     - name: Build exe
-      run: fyne-cross windows --pull
+      run: fyne-cross windows -image "enerdhil/rps-builder:windows" -pull
