@@ -26,7 +26,7 @@ import (
 	"github.com/google/gopacket/tcpassembly/tcpreader"
 )
 
-var iface = flag.String("i", "eth0", "Interface to get packets from")
+var iface = flag.String("i", "Ethernet", "Interface to get packets from")
 var fname = flag.String("r", "", "Filename to read from, overrides -i")
 var snaplen = flag.Int("s", 1600, "SnapLen for pcap packet capture")
 var filter = flag.String("f", "tcp and dst port 80", "BPF filter for pcap")
@@ -78,9 +78,9 @@ func spawnWindow() {
 	}
 
 	w.SetContent(widget.NewLabel("Fyne System Tray"))
-	w.SetCloseIntercept(func() {
-		w.Hide()
-	})
+	// w.SetCloseIntercept(func() {
+	// 	w.Hide()
+	// })
 	selfUpdate(a, w)
 	w.SetContent(c)
 
@@ -139,7 +139,9 @@ func main() {
 	defer util.Run()()
 	var handle *pcap.Handle
 	var err error
-	spawnWindow()
+	// spawnWindow()
+
+	log.Println("readinge in packets\r")
 
 	if *fname != "" {
 		log.Printf("Reading from pcap dump %q", *fname)
@@ -156,7 +158,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	spawnWindow()
 	// Set up assembly
 	streamFactory := &totoStreamFactory{}
 	streamPool := tcpassembly.NewStreamPool(streamFactory)
