@@ -100,7 +100,8 @@ const timeout time.Duration = time.Minute * 5
 type myStream struct {
 	bytes int64 // total bytes seen on this stream.
 	bidi  *bidi // maps to my bidirectional twin.
-	done  bool  // if true, we've seen the last packet we're going to for this stream.
+	buf   []byte
+	done  bool // if true, we've seen the last packet we're going to for this stream.
 }
 
 // bidi stores each unidirectional side of a bidirectional stream.
@@ -169,6 +170,7 @@ func (s *myStream) Reassembled(rs []tcpassembly.Reassembly) {
 	for _, r := range rs {
 		// For now, we'll simply count the bytes on each side of the TCP stream.
 		s.bytes += int64(len(r.Bytes))
+		s.buf = append(s.buf, r.Bytes...)
 		if r.Skip > 0 {
 			s.bytes += int64(r.Skip)
 		}
@@ -184,6 +186,7 @@ func (s *myStream) Reassembled(rs []tcpassembly.Reassembly) {
 // ReassemblyComplete marks this stream as finished.
 func (s *myStream) ReassemblyComplete() {
 	s.done = true
+	log.Println(s.buf)
 	s.bidi.maybeFinish()
 }
 
@@ -209,8 +212,6 @@ func main() {
 	var handle *pcap.Handle
 	var err error
 	// spawnWindow()
-
-	log.Println("readinge in packets\r")
 
 	if *pcapfile != "" {
 		log.Printf("Reading from pcap dump %q", *pcapfile)
@@ -249,7 +250,7 @@ func main() {
 				return
 			}
 			if *logAllPackets {
-				log.Println(packet)
+				log.Println(packet.TransportLayer().LayerPayload())
 			}
 			if packet.NetworkLayer() == nil || packet.TransportLayer() == nil || packet.TransportLayer().LayerType() != layers.LayerTypeTCP {
 				log.Println("Unusable packet")
