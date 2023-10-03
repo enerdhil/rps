@@ -1,12 +1,12 @@
 package main
 
 import (
-	//"bufio"
+	"bufio"
 	"crypto/ed25519"
-	//"encoding/hex"
+	"encoding/hex"
 	"flag"
-	//"fmt"
-	//"io"
+	"fmt"
+	"io"
 	"log"
 	"time"
 
@@ -17,13 +17,13 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/fynelabs/fyneselfupdate"
 	"github.com/fynelabs/selfupdate"
-	//"github.com/google/gopacket"
-	//"github.com/google/gopacket/examples/util"
-	//"github.com/google/gopacket/layers"
-	//_ "github.com/google/gopacket/layers"
-	//"github.com/google/gopacket/pcap"
-	//"github.com/google/gopacket/tcpassembly"
-	//"github.com/google/gopacket/tcpassembly/tcpreader"
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/examples/util"
+	"github.com/google/gopacket/layers"
+	_ "github.com/google/gopacket/layers"
+	"github.com/google/gopacket/pcap"
+	"github.com/google/gopacket/tcpassembly"
+	"github.com/google/gopacket/tcpassembly/tcpreader"
 )
 
 var iface = flag.String("i", "eth0", "Interface to get packets from")
@@ -88,111 +88,109 @@ func spawnWindow() {
 }
 
 // totoStreamFactory implements tcpassembly.StreamFactory
-//type totoStreamFactory struct{}
+type totoStreamFactory struct{}
 
-//// totoStream will handle the actual decoding of toto requests.
-//type totoStream struct {
-//net, transport gopacket.Flow
-//r              tcpreader.ReaderStream
-//}
+// totoStream will handle the actual decoding of toto requests.
+type totoStream struct {
+	net, transport gopacket.Flow
+	r              tcpreader.ReaderStream
+}
 
-//func (h *totoStreamFactory) New(net, transport gopacket.Flow) tcpassembly.Stream {
-//hstream := &totoStream{
-//net:       net,
-//transport: transport,
-//r:         tcpreader.NewReaderStream(),
-//}
-//go hstream.run() // Important... we must guarantee that data from the reader stream is read.
+func (h *totoStreamFactory) New(net, transport gopacket.Flow) tcpassembly.Stream {
+	hstream := &totoStream{
+		net:       net,
+		transport: transport,
+		r:         tcpreader.NewReaderStream(),
+	}
+	go hstream.run() // Important... we must guarantee that data from the reader stream is read.
 
-//// ReaderStream implements tcpassembly.Stream, so we can return a pointer to it.
-//return &hstream.r
-//}
+	// ReaderStream implements tcpassembly.Stream, so we can return a pointer to it.
+	return &hstream.r
+}
 
-//func (h *totoStream) run() {
-//log.Println("toto packet")
-//buf := bufio.NewReader(&h.r)
-//buffer := make([]byte, 256)
-//for {
-//_, err := buf.Read(buffer)
-//if err != nil {
+func (h *totoStream) run() {
+	log.Println("toto packet")
+	buf := bufio.NewReader(&h.r)
+	buffer := make([]byte, 256)
+	for {
+		_, err := buf.Read(buffer)
+		if err != nil {
 
-//if err != io.EOF {
-//fmt.Println(err)
-//}
+			if err != io.EOF {
+				fmt.Println(err)
+			}
 
-//break
-//}
+			break
+		}
 
-//fmt.Printf("%s", hex.Dump(buffer))
-//if err == io.EOF {
-//// We must read until we see an EOF... very important!
-//return
-//} else if err != nil {
-//log.Println("Error reading stream", h.net, h.transport, ":", err)
-//} else {
-//bodyBytes := tcpreader.DiscardBytesToEOF(req.Body)
-//req.Body.Close()
-//log.Println("Received request from stream", h.net, h.transport, ":", req, "with", bodyBytes, "bytes in request body")
-//}
-//}
-//}
+		fmt.Printf("%s", hex.Dump(buffer))
+		if err == io.EOF {
+			// We must read until we see an EOF... very important!
+			return
+		} else if err != nil {
+			log.Println("Error reading stream", h.net, h.transport, ":", err)
+		} else {
+
+		}
+	}
+}
 
 func main() {
-	//defer util.Run()()
-	//var handle *pcap.Handle
-	//var err error
-	//spawnWindow()
+	defer util.Run()()
+	var handle *pcap.Handle
+	var err error
+	spawnWindow()
 
-	//if *fname != "" {
-	//log.Printf("Reading from pcap dump %q", *fname)
-	//handle, err = pcap.OpenOffline(*fname)
-	//} else {
-	//log.Printf("Starting capture on interface %q", *iface)
-	//handle, err = pcap.OpenLive(*iface, int32(*snaplen), true, pcap.BlockForever)
-	//}
-	//if err != nil {
-	//log.Fatal(err)
-	//}
+	if *fname != "" {
+		log.Printf("Reading from pcap dump %q", *fname)
+		handle, err = pcap.OpenOffline(*fname)
+	} else {
+		log.Printf("Starting capture on interface %q", *iface)
+		handle, err = pcap.OpenLive(*iface, int32(*snaplen), true, pcap.BlockForever)
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	//if err := handle.SetBPFFilter(*filter); err != nil {
-	//log.Fatal(err)
-	//}
+	if err := handle.SetBPFFilter(*filter); err != nil {
+		log.Fatal(err)
+	}
 
 	spawnWindow()
 	// Set up assembly
-	//streamFactory := &totoStreamFactory{}
-	//streamPool := tcpassembly.NewStreamPool(streamFactory)
-	//assembler := tcpassembly.NewAssembler(streamPool)
+	streamFactory := &totoStreamFactory{}
+	streamPool := tcpassembly.NewStreamPool(streamFactory)
+	assembler := tcpassembly.NewAssembler(streamPool)
 
-	//log.Println("readinge in packets")
+	log.Println("readinge in packets")
 	// Read in packets, pass to assembler.
-	//packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
-	//fmt.Printf("%v", packetSource)
-	//packets := packetSource.Packets()
-	//fmt.Printf("%v", packets)
-	//ticker := time.Tick(time.Minute)
-	//for {
-	//select {
-	//case packet := <-packets:
-	//// A nil packet indicates the end of a pcap file.
-	//if packet == nil {
-	//return
-	//}
-	//if *logAllPackets {
-	//log.Println(packet)
-	//}
-	//if packet.NetworkLayer() == nil || packet.TransportLayer() == nil || packet.TransportLayer().LayerType() != layers.LayerTypeTCP {
-	//log.Println("Unusable packet")
-	//continue
-	//}
-	//tcp := packet.TransportLayer().(*layers.TCP)
-	//assembler.AssembleWithTimestamp(packet.NetworkLayer().NetworkFlow(), tcp, packet.Metadata().Timestamp)
+	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
+	fmt.Printf("%v", packetSource)
+	packets := packetSource.Packets()
+	fmt.Printf("%v", packets)
+	ticker := time.Tick(time.Minute)
+	for {
+		select {
+		case packet := <-packets:
+			// A nil packet indicates the end of a pcap file.
+			if packet == nil {
+				return
+			}
+			if *logAllPackets {
+				log.Println(packet)
+			}
+			if packet.NetworkLayer() == nil || packet.TransportLayer() == nil || packet.TransportLayer().LayerType() != layers.LayerTypeTCP {
+				log.Println("Unusable packet")
+				continue
+			}
+			tcp := packet.TransportLayer().(*layers.TCP)
+			assembler.AssembleWithTimestamp(packet.NetworkLayer().NetworkFlow(), tcp, packet.Metadata().Timestamp)
 
-	//case <-ticker:
-	//// Every minute, flush connections that haven't seen activity in the past 2 minutes.
-	//assembler.FlushOlderThan(time.Now().Add(time.Minute * -2))
-	//default:
-	//log.Println("wtf")
-	//}
-	//}
+		case <-ticker:
+			// Every minute, flush connections that haven't seen activity in the past 2 minutes.
+			assembler.FlushOlderThan(time.Now().Add(time.Minute * -2))
+		default:
+			log.Println("wtf")
+		}
+	}
 }
