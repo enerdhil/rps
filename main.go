@@ -213,6 +213,12 @@ func main() {
 	var err error
 	// spawnWindow()
 
+	messages, err := parse_json("./messages.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%v\n", messages)
+
 	if *pcapfile != "" {
 		log.Printf("Reading from pcap dump %q", *pcapfile)
 		handle, err = pcap.OpenOffline(*pcapfile)
