@@ -6,29 +6,33 @@ import (
 	"os"
 )
 
+type Messages struct {
+	Messages []Message `json:"messages,omitempty"`
+}
+
 type Message struct {
-	Fields          []Field `json:"fields"`
-	Name            string  `json:"name"`
-	Namespace       string  `json:"namespace"`
-	ProtocolID      int     `json:"protocolID"`
-	Super           string  `json:"super"`
-	SuperSerialize  bool    `json:"super_serialize"`
-	Supernamespace  string  `json:"supernamespace"`
-	UseHashFunction bool    `json:"use_hash_function"`
+	Fields          []Field `json:"fields,omitempty"`
+	Name            string  `json:"name,omitempty"`
+	Namespace       string  `json:"namespace,omitempty"`
+	ProtocolID      int     `json:"protocolID,omitempty"`
+	Super           string  `json:"super,omitempty"`
+	SuperSerialize  bool    `json:"super_serialize,omitempty"`
+	Supernamespace  string  `json:"supernamespace,omitempty"`
+	UseHashFunction bool    `json:"use_hash_function,omitempty"`
 }
 
 type Bounds struct {
-	Low string `json:"low"`
-	Up  string `json:"up"`
+	Low string `json:"low,omitempty"`
+	Up  string `json:"up,omitempty"`
 }
 
 type Field struct {
-	Bound                 Bounds `json:"bounds"`
-	DefaultValue          string `json:"default_value"`
-	Name                  string `json:"name"`
-	Position              int    `json:"position"`
-	Type                  string `json:"type"`
-	WriteMethod           string `json:"write_method"`
+	Bound                 Bounds `json:"bounds,omitempty"`
+	DefaultValue          string `json:"default_value,omitempty"`
+	Name                  string `json:"name,omitempty"`
+	Position              int    `json:"position,omitempty"`
+	Type                  string `json:"type,omitempty"`
+	WriteMethod           string `json:"write_method,omitempty"`
 	BooleanByteWrapperPos int    `json:"boolean_byte_wrapper_position,omitempty"`
 	UseBooleanByteWrapper bool   `json:"use_boolean_byte_wrapper,omitempty"`
 	IsVector              bool   `json:"is_vector,omitempty"`
@@ -39,19 +43,18 @@ type Field struct {
 	WriteTypeIDMethod     string `json:"write_type_id_method,omitempty"`
 }
 
-func parse_json(jsonfile string) ([]Message, error) {
+func parse_json(jsonfile string) (Messages, error) {
+	var messages Messages
 	jsonData, err := os.ReadFile(jsonfile)
 	if err != nil {
-		return nil, err
+		return messages, err
 	}
-
-	var messages []Message
 
 	if err := json.Unmarshal([]byte(jsonData), &messages); err != nil {
-		return nil, err
+		return messages, err
 	}
 
-	for _, message := range messages {
+	for _, message := range messages.Messages {
 		fmt.Printf("Name: %s, Namespace: %s, ProtocolID: %d\n", message.Name, message.Namespace, message.ProtocolID)
 		// Access other fields as needed
 	}

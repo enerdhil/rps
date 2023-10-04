@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"reflect"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -210,14 +211,24 @@ func (bd *bidi) maybeFinish() {
 func main() {
 	defer util.Run()()
 	var handle *pcap.Handle
-	var err error
 	// spawnWindow()
 
 	messages, err := parse_json("./messages.json")
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("%v\n", messages)
+	fmt.Println(reflect.TypeOf(messages))
+	fmt.Println(reflect.TypeOf(messages.Messages))
+	fmt.Println(reflect.TypeOf(messages.Messages[1]))
+	fmt.Println(reflect.TypeOf(messages.Messages[1].ProtocolID))
+
+	messagesmap := make(map[int]Message)
+	for _, message := range messages.Messages {
+		messagesmap[message.ProtocolID] = message
+	}
+
+	message := messagesmap[3276]
+	fmt.Printf("Name: %s, Namespace: %s, ProtocolID: %d\n", message.Name, message.Namespace, message.ProtocolID)
 
 	if *pcapfile != "" {
 		log.Printf("Reading from pcap dump %q", *pcapfile)
