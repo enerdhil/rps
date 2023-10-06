@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"reflect"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -77,10 +76,10 @@ func spawnWindow() {
 	w.ShowAndRun()
 }
 
-var iface = flag.String("i", "eth0", "Interface to get packets from")
+var iface = flag.String("i", "Ethernet", "Interface to get packets from")
 var snaplen = flag.Int("s", 16<<10, "SnapLen for pcap packet capture")
 var pcapfile = flag.String("r", "", "Pcap file to read from")
-var filter = flag.String("f", "tcp", "BPF filter for pcap")
+var filter = flag.String("f", "tcp port 5555", "BPF filter for pcap")
 var logAllPackets = flag.Bool("v", false, "Logs every packet in great detail")
 
 // key is used to map bidirectional streams to each other.
@@ -187,6 +186,7 @@ func (s *myStream) Reassembled(rs []tcpassembly.Reassembly) {
 // ReassemblyComplete marks this stream as finished.
 func (s *myStream) ReassemblyComplete() {
 	s.done = true
+
 	log.Println(s.buf)
 	s.bidi.maybeFinish()
 }
@@ -211,31 +211,39 @@ func (bd *bidi) maybeFinish() {
 func main() {
 	defer util.Run()()
 	var handle *pcap.Handle
+	var err error
 	// spawnWindow()
 
-	messages, err := parse_json("./messages.json")
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(reflect.TypeOf(messages))
-	fmt.Println(reflect.TypeOf(messages.Messages))
-	fmt.Println(reflect.TypeOf(messages.Messages[1]))
-	fmt.Println(reflect.TypeOf(messages.Messages[1].ProtocolID))
+	layers.RegisterTCPPortLayerType(layers.TCPPort(5555), LayerTypeDofusMsg)
+	// messages, err := parse_json("./messages.json")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// fmt.Println(reflect.TypeOf(messages))
+	// fmt.Println(reflect.TypeOf(messages.Messages))
+	// fmt.Println(reflect.TypeOf(messages.Messages[1]))
+	// fmt.Println(reflect.TypeOf(messages.Messages[1].ProtocolID))
 
-	messagesmap := make(map[int]Message)
-	for _, message := range messages.Messages {
-		messagesmap[message.ProtocolID] = message
-	}
+	// messagesmap := make(map[int]Message)
+	// for _, message := range messages.Messages {
+	// 	messagesmap[message.ProtocolID] = message
+	// }
 
-	message := messagesmap[3276]
-	fmt.Printf("Name: %s, Namespace: %s, ProtocolID: %d\n", message.Name, message.Namespace, message.ProtocolID)
+	// message := messagesmap[3276]
+	// fmt.Printf("Name: %s, Namespace: %s, ProtocolID: %d\n", message.Name, message.Namespace, message.ProtocolID)
 
 	if *pcapfile != "" {
 		log.Printf("Reading from pcap dump %q", *pcapfile)
 		handle, err = pcap.OpenOffline(*pcapfile)
 	} else {
-		log.Printf("Starting capture on interface %q", *iface)
-		handle, err = pcap.OpenLive(*iface, int32(*snaplen), true, pcap.BlockForever)
+
+		// device, err := net.InterfaceByName(*iface)
+		// if err != nil {
+		// 	log.Fatal(err)
+		// }
+		// fmt.Println(device)
+		log.Printf("Starting capture on interface %q", "\\Device\\NPF_{4AD04921-6CE8-4198-AA35-DFA8B523775E}")
+		handle, err = pcap.OpenLive("\\Device\\NPF_{4AD04921-6CE8-4198-AA35-DFA8B523775E}", int32(*snaplen), true, pcap.BlockForever)
 	}
 	if err != nil {
 		log.Fatal(err)
@@ -245,14 +253,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Set up assembly
-	streamFactory := &myFactory{bidiMap: make(map[key]*bidi)}
-	streamPool := tcpassembly.NewStreamPool(streamFactory)
-	assembler := tcpassembly.NewAssembler(streamPool)
-	// Limit memory usage by auto-flushing connection state if we get over 100K
-	// packets in memory, or over 1000 for a single stream.
-	assembler.MaxBufferedPagesTotal = 100000
-	assembler.MaxBufferedPagesPerConnection = 1000
+	// // Set up assembly
+	// streamFactory := &myFactory{bidiMap: make(map[key]*bidi)}
+	// streamPool := tcpassembly.NewStreamPool(streamFactory)
+	// assembler := tcpassembly.NewAssembler(streamPool)
+	// // Limit memory usage by auto-flushing connection state if we get over 100K
+	// // packets in memory, or over 1000 for a single stream.
+	// assembler.MaxBufferedPagesTotal = 100000
+	// assembler.MaxBufferedPagesPerConnection = 1000
 
 	log.Println("reading in packets")
 	// Read in packets, pass to assembler.
@@ -266,8 +274,14 @@ func main() {
 				log.Println("End of pcap")
 				return
 			}
+			dofuslayer := packet.Layer(LayerTypeDofusMsg)
+			// log.Println(dofuslayer)
+			if dofuslayer != nil {
+				dofuslayercontent, _ := dofuslayer.(*DofusMsg)
+				log.Println(dofuslayercontent.ProtocolId)
+			}
 			if *logAllPackets {
-				log.Println(packet.TransportLayer().LayerPayload())
+				log.Println(packet)
 			}
 			if packet.NetworkLayer() == nil || packet.TransportLayer() == nil || packet.TransportLayer().LayerType() != layers.LayerTypeTCP {
 				log.Println("Unusable packet")
