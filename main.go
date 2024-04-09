@@ -1,300 +1,366 @@
 package main
 
 import (
-	"crypto/ed25519"
+	"bufio"
+	"encoding/binary"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"os"
+	"sync"
 	"time"
 
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/driver/desktop"
-	"fyne.io/fyne/v2/widget"
-	"github.com/fynelabs/fyneselfupdate"
-	"github.com/fynelabs/selfupdate"
 	"github.com/google/gopacket"
-	"github.com/google/gopacket/examples/util"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
-	"github.com/google/gopacket/tcpassembly"
+	"github.com/google/gopacket/reassembly"
 )
 
-func selfUpdate(a fyne.App, w fyne.Window) {
-	// Used `selfupdatectl create-keys` followed by `selfupdatectl print-key`
-	publicKey := ed25519.PublicKey{22, 248, 212, 224, 181, 248, 110, 37, 118, 222, 34, 20, 180, 89, 45, 177, 141, 34, 132, 45, 157, 189, 223, 198, 43, 182, 78, 64, 152, 110, 75, 216}
-
-	// The public key above match the signature of the below file served by our CDN
-	httpSource := selfupdate.NewHTTPSource(nil, "https://rps.s3.fr-par.scw.cloud/fyne-cross/bin/{{.OS}}-{{.Arch}}/RPS{{.Ext}}")
-
-	config := fyneselfupdate.NewConfigWithTimeout(a, w, time.Duration(1)*time.Minute,
-		httpSource,
-		selfupdate.Schedule{FetchOnStart: true, Interval: time.Hour * time.Duration(12)},
-		publicKey)
-
-	_, err := selfupdate.Manage(config)
-	if err != nil {
-		log.Println("Error while setting up update manager: ", err)
-		return
-	}
-
-}
-
-func spawnWindow() {
-	a := app.New()
-	w := a.NewWindow("Hello")
-	c := container.NewVBox()
-
-	var bars [10]*widget.ProgressBar
-	for i := 0; i <= 9; i += 1 {
-		bars[i] = widget.NewProgressBar()
-		bars[i].SetValue(float64(i) * 0.1)
-		c.Add(bars[i])
-	}
-
-	if desk, ok := a.(desktop.App); ok {
-		m := fyne.NewMenu("MyApp",
-			fyne.NewMenuItem("Show", func() {
-				w.Show()
-			}),
-			fyne.NewMenuItem("Update", func() {
-				fyneselfupdate.NewUpgradeConfirmCallbackWithTimeout(w, time.Second*5)
-				fyneselfupdate.NewProgressCallback(w)
-				fyneselfupdate.NewRestartConfirmCallbackWithTimeout(w, time.Second*5)
-			}))
-		desk.SetSystemTrayMenu(m)
-	}
-
-	w.SetContent(widget.NewLabel("Fyne System Tray"))
-	// w.SetCloseIntercept(func() {
-	// 	w.Hide()
-	// })
-	selfUpdate(a, w)
-	w.SetContent(c)
-
-	w.ShowAndRun()
-}
+// Dofus Protocol
+//
+// Standard port is TCP/5555
+//
+// +---------------------+
+// |        Header       |
+// +---------------------+
+// |       Message       |
+// +---------------------+
+//
+//  Dofus Header
+//  0   1   2   3   4   5   6   7   8   9   10  11  12  13  14  15
+//  +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+//  |                           ProtocolId                  |LenSize|
+//  +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+//  |             MsgLen            |    MsgLen (if LenSize == 2)   |
+//  +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+//  |    MsgLen (if LenSize == 3)   |              n/a              |
+//  +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+//
+//  As we see in the schema, the len of the message is variable in
+//  size. We first need to get LenSize to know on how many bytes we
+//  need to read MsgLen.
+//
+//  If LenSize is 3, the pseudocode to get the value is the following
+//  (uint)(((msgLen1 & 255) << 16) + ((msgLen2 & 255) << 8) + (msgLen3 & 255))
 
 var iface = flag.String("i", "Ethernet", "Interface to get packets from")
-var snaplen = flag.Int("s", 16<<10, "SnapLen for pcap packet capture")
 var pcapfile = flag.String("r", "", "Pcap file to read from")
 var filter = flag.String("f", "tcp port 5555", "BPF filter for pcap")
+var listInterfaces = flag.Bool("l", false, "List all interfaces on the system")
 var logAllPackets = flag.Bool("v", false, "Logs every packet in great detail")
+var defaultSnapLen int32 = 262144
+var jsonString string
 
-// key is used to map bidirectional streams to each other.
-type key struct {
-	net, transport gopacket.Flow
+type dofusMsg struct {
+	// Header fields
+	ProtocolId uint16
+	LenSize    uint8
+	MsgLen     uint32
+
+	body []byte
 }
 
-// String prints out the key in a human-readable fashion.
-func (k key) String() string {
-	return fmt.Sprintf("%v:%v", k.net, k.transport)
-}
+func (dM *dofusMsg) decode(b *bufio.Reader, isClient bool) error {
+	var err error
 
-// timeout is the length of time to wait befor flushing connections and
-// bidirectional stream pairs.
-const timeout time.Duration = time.Minute * 5
+	// Transform stream to byte slice
+	data, err := b.Peek(2)
+	if err != nil {
+		return err
+	}
 
-// myStream implements tcpassembly.Stream
-type myStream struct {
-	bytes int64 // total bytes seen on this stream.
-	bidi  *bidi // maps to my bidirectional twin.
-	buf   []byte
-	done  bool // if true, we've seen the last packet we're going to for this stream.
-}
+	// since there are no further layers, the baselayer's content is
+	// pointing to this layer
+	dM.ProtocolId = binary.BigEndian.Uint16(data[:2]) >> 2
+	dM.LenSize = data[1] & 0x3
+	switch dM.LenSize {
+	case 0:
+		dM.MsgLen = 0
+	case 1:
+		data, err = b.Peek(3)
+		if err != nil {
+			return err
+		}
+		dM.MsgLen = uint32(data[2])
+	case 2:
+		data, err = b.Peek(4)
+		if err != nil {
+			return err
+		}
+		dM.MsgLen = uint32(binary.BigEndian.Uint16(data[2:4]))
+	case 3:
+		data, err = b.Peek(5)
+		if err != nil {
+			return err
+		}
+		dM.MsgLen = uint32((data[2] << 16) + (data[3] << 8) + (data[4]))
+	}
+	if !isClient {
+		if *logAllPackets {
+			log.Println("DofusMsg : ")
+			log.Printf("ProtocolId: %v\n", dM.ProtocolId)
+			log.Printf("LenSize : %v\n", dM.LenSize)
+			log.Printf("MsgLen : %v\n", dM.MsgLen)
+		}
 
-// bidi stores each unidirectional side of a bidirectional stream.
-//
-// When a new stream comes in, if we don't have an opposite stream, a bidi is
-// created with 'a' set to the new stream.  If we DO have an opposite stream,
-// 'b' is set to the new stream.
-type bidi struct {
-	key            key       // Key of the first stream, mostly for logging.
-	a, b           *myStream // the two bidirectional streams.
-	lastPacketSeen time.Time // last time we saw a packet from either stream.
-}
-
-// myFactory implements tcpassmebly.StreamFactory
-type myFactory struct {
-	// bidiMap maps keys to bidirectional stream pairs.
-	bidiMap map[key]*bidi
-}
-
-// New handles creating a new tcpassembly.Stream.
-func (f *myFactory) New(netFlow, tcpFlow gopacket.Flow) tcpassembly.Stream {
-	// Create a new stream.
-	s := &myStream{}
-
-	// Find the bidi bidirectional struct for this stream, creating a new one if
-	// one doesn't already exist in the map.
-	k := key{netFlow, tcpFlow}
-	bd := f.bidiMap[k]
-	if bd == nil {
-		bd = &bidi{a: s, key: k}
-		log.Printf("[%v] created first side of bidirectional stream", bd.key)
-		// Register bidirectional with the reverse key, so the matching stream going
-		// the other direction will find it.
-		f.bidiMap[key{netFlow.Reverse(), tcpFlow.Reverse()}] = bd
+	}
+	b.Discard(int(2 + dM.LenSize))
+	if !isClient {
+		dM.body, err = io.ReadAll(io.LimitReader(b, int64(dM.MsgLen)))
 	} else {
-		log.Printf("[%v] found second side of bidirectional stream", bd.key)
-		bd.b = s
-		// Clear out the bidi we're using from the map, just in case.
-		delete(f.bidiMap, k)
+		b.Discard(int(dM.MsgLen))
 	}
-	s.bidi = bd
-	return s
+	if err != nil {
+		return err
+	}
+	return err
 }
 
-// emptyStream is used to finish bidi that only have one stream, in
-// collectOldStreams.
-var emptyStream = &myStream{done: true}
+type dofusReader struct {
+	ident    string
+	isClient bool
+	bytes    chan []byte
+	data     []byte
+	parent   *tcpStream
+}
 
-// collectOldStreams finds any streams that haven't received a packet within
-// 'timeout', and sets/finishes the 'b' stream inside them.  The 'a' stream may
-// still receive packets after this.
-func (f *myFactory) collectOldStreams() {
-	cutoff := time.Now().Add(-timeout)
-	for k, bd := range f.bidiMap {
-		if bd.lastPacketSeen.Before(cutoff) {
-			log.Printf("[%v] timing out old stream", bd.key)
-			bd.b = emptyStream   // stub out b with an empty stream.
-			delete(f.bidiMap, k) // remove it from our map.
-			bd.maybeFinish()     // if b was the last stream we were waiting for, finish up.
+func (hR *dofusReader) Read(bytes []byte) (int, error) {
+	ok := true
+	for len(hR.data) == 0 && ok {
+		hR.data, ok = <-hR.bytes
+	}
+	if !ok || len(hR.data) == 0 {
+		return 0, io.EOF
+	}
+	l := copy(bytes, hR.data)
+	hR.data = hR.data[l:]
+	return l, nil
+}
+
+func (hR *dofusReader) Run(wg *sync.WaitGroup) {
+	defer wg.Done()
+	b := bufio.NewReader(hR)
+	for {
+		if hR.isClient {
+			// log.Println("New packet")
+
+			msg := new(dofusMsg)
+			//Client Request
+			err := msg.decode(b, true)
+			// log.Println("After decode")
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				break
+			}
+			// body, err := io.ReadAll()
+			// log.Printf("Client %v\n", msg)
+		} else {
+
+			msg := new(dofusMsg)
+			//Client Request
+			err := msg.decode(b, false)
+			// log.Println("After decode")
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				break
+			}
+			if *logAllPackets {
+
+				dumpByteSlice(msg.body)
+			}
 		}
 	}
 }
 
-// Reassembled handles reassembled TCP stream data.
-func (s *myStream) Reassembled(rs []tcpassembly.Reassembly) {
-	for _, r := range rs {
-		// For now, we'll simply count the bytes on each side of the TCP stream.
-		s.bytes += int64(len(r.Bytes))
-		s.buf = append(s.buf, r.Bytes...)
-		if r.Skip > 0 {
-			s.bytes += int64(r.Skip)
-		}
-		// Mark that we've received new packet data.
-		// We could just use time.Now, but by using r.Seen we handle the case
-		// where packets are being read from a file and could be very old.
-		if s.bidi.lastPacketSeen.Before(r.Seen) {
-			s.bidi.lastPacketSeen = r.Seen
+type Context struct {
+	CaptureInfo gopacket.CaptureInfo
+}
+
+func (ac *Context) GetCaptureInfo() gopacket.CaptureInfo {
+	return ac.CaptureInfo
+}
+
+// Implements a reassembly.Stream
+type tcpStream struct {
+	net, transport gopacket.Flow
+	tcpstate       *reassembly.TCPSimpleFSM
+	optchecker     reassembly.TCPOptionCheck
+	reversed       bool
+	client         dofusReader
+	server         dofusReader
+	ident          string
+}
+
+func (tS *tcpStream) Accept(tcp *layers.TCP, ci gopacket.CaptureInfo, dir reassembly.TCPFlowDirection, nextSeq reassembly.Sequence, start *bool, ac reassembly.AssemblerContext) bool {
+	if !tS.tcpstate.CheckState(tcp, dir) {
+		return false
+	}
+	if err := tS.optchecker.Accept(tcp, ci, dir, nextSeq, start); err != nil {
+		return false
+	}
+	return true
+}
+
+func (tS *tcpStream) ReassembledSG(sg reassembly.ScatterGather, ac reassembly.AssemblerContext) {
+	dir, _, _, _ := sg.Info()
+	length, _ := sg.Lengths()
+
+	data := sg.Fetch(length)
+
+	if length > 0 {
+		if dir == reassembly.TCPDirClientToServer && !tS.reversed {
+			tS.client.bytes <- data
+		} else {
+			tS.server.bytes <- data
 		}
 	}
 }
 
-// ReassemblyComplete marks this stream as finished.
-func (s *myStream) ReassemblyComplete() {
-	s.done = true
-
-	log.Println(s.buf)
-	s.bidi.maybeFinish()
+func (tS *tcpStream) ReassemblyComplete(ac reassembly.AssemblerContext) bool {
+	close(tS.client.bytes)
+	close(tS.server.bytes)
+	return false
 }
 
-// maybeFinish will wait until both directions are complete, then print out
-// stats.
-func (bd *bidi) maybeFinish() {
-	switch {
-	case bd.a == nil:
-		log.Fatalf("[%v] a should always be non-nil, since it's set when bidis are created", bd.key)
-	case !bd.a.done:
-		log.Printf("[%v] still waiting on first stream", bd.key)
-	case bd.b == nil:
-		log.Printf("[%v] no second stream yet", bd.key)
-	case !bd.b.done:
-		log.Printf("[%v] still waiting on second stream", bd.key)
-	default:
-		log.Printf("[%v] FINISHED, bytes: %d tx, %d rx", bd.key, bd.a.bytes, bd.b.bytes)
+// Implements Interface reassembly.StreamFactory
+type tcpStreamFactory struct {
+	wg sync.WaitGroup
+}
+
+func (tSF *tcpStreamFactory) New(netFlow gopacket.Flow, tcpFlow gopacket.Flow, tcp *layers.TCP, ac reassembly.AssemblerContext) reassembly.Stream {
+	fsmOptions := reassembly.TCPSimpleFSMOptions{
+		SupportMissingEstablishment: false,
 	}
+
+	stream := &tcpStream{
+		net:        netFlow,
+		transport:  tcpFlow,
+		tcpstate:   reassembly.NewTCPSimpleFSM(fsmOptions),
+		optchecker: reassembly.NewTCPOptionCheck(),
+		reversed:   tcp.SrcPort == 80,
+		ident:      fmt.Sprintf("%s - %s", netFlow, tcpFlow),
+	}
+
+	if tcp.SrcPort == 5555 || tcp.DstPort == 5555 {
+		stream.client = dofusReader{
+			ident:    fmt.Sprintf("%s - %s", netFlow, tcpFlow),
+			bytes:    make(chan []byte),
+			isClient: true,
+			parent:   stream,
+		}
+		stream.server = dofusReader{
+			ident:    fmt.Sprintf("%s - %s", netFlow, tcpFlow),
+			bytes:    make(chan []byte),
+			isClient: false,
+			parent:   stream,
+		}
+		tSF.wg.Add(2)
+		go stream.client.Run(&tSF.wg)
+		go stream.server.Run(&tSF.wg)
+	}
+
+	return stream
+}
+
+func (tSF *tcpStreamFactory) WaitGoRoutines() {
+	tSF.wg.Wait()
 }
 
 func main() {
-	defer util.Run()()
-	var handle *pcap.Handle
 	var err error
-	// spawnWindow()
+	log.Println("start")
+	defer log.Println("end")
+	flag.Parse()
 
-	layers.RegisterTCPPortLayerType(layers.TCPPort(5555), LayerTypeDofusMsg)
-	// messages, err := parse_json("./messages.json")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// fmt.Println(reflect.TypeOf(messages))
-	// fmt.Println(reflect.TypeOf(messages.Messages))
-	// fmt.Println(reflect.TypeOf(messages.Messages[1]))
-	// fmt.Println(reflect.TypeOf(messages.Messages[1].ProtocolID))
-
-	// messagesmap := make(map[int]Message)
-	// for _, message := range messages.Messages {
-	// 	messagesmap[message.ProtocolID] = message
-	// }
-
-	// message := messagesmap[3276]
-	// fmt.Printf("Name: %s, Namespace: %s, ProtocolID: %d\n", message.Name, message.Namespace, message.ProtocolID)
-
-	if *pcapfile != "" {
-		log.Printf("Reading from pcap dump %q", *pcapfile)
-		handle, err = pcap.OpenOffline(*pcapfile)
-	} else {
-
-		// device, err := net.InterfaceByName(*iface)
-		// if err != nil {
-		// 	log.Fatal(err)
-		// }
-		// fmt.Println(device)
-		log.Printf("Starting capture on interface %q", "\\Device\\NPF_{4AD04921-6CE8-4198-AA35-DFA8B523775E}")
-		handle, err = pcap.OpenLive("\\Device\\NPF_{4AD04921-6CE8-4198-AA35-DFA8B523775E}", int32(*snaplen), true, pcap.BlockForever)
-	}
+	bytesJSON, err := os.ReadFile("toto.json")
 	if err != nil {
 		log.Fatal(err)
 	}
+	jsonString = string(bytesJSON)
 
-	if err := handle.SetBPFFilter(*filter); err != nil {
-		log.Fatal(err)
+	parse_json()
+
+	if *listInterfaces {
+		ListInterfaces()
+		return
 	}
 
-	// // Set up assembly
-	// streamFactory := &myFactory{bidiMap: make(map[key]*bidi)}
-	// streamPool := tcpassembly.NewStreamPool(streamFactory)
-	// assembler := tcpassembly.NewAssembler(streamPool)
-	// // Limit memory usage by auto-flushing connection state if we get over 100K
-	// // packets in memory, or over 1000 for a single stream.
-	// assembler.MaxBufferedPagesTotal = 100000
-	// assembler.MaxBufferedPagesPerConnection = 1000
+	var handle *pcap.Handle
 
-	log.Println("reading in packets")
-	// Read in packets, pass to assembler.
-	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
-	packets := packetSource.Packets()
-	ticker := time.Tick(timeout / 4)
-	for {
-		select {
-		case packet := <-packets:
-			if packet == nil {
-				log.Println("End of pcap")
-				return
-			}
-			dofuslayer := packet.Layer(LayerTypeDofusMsg)
-			// log.Println(dofuslayer)
-			if dofuslayer != nil {
-				dofuslayercontent, _ := dofuslayer.(*DofusMsg)
-				log.Println(dofuslayercontent.ProtocolId)
-			}
-			if *logAllPackets {
-				log.Println(packet)
-			}
-			if packet.NetworkLayer() == nil || packet.TransportLayer() == nil || packet.TransportLayer().LayerType() != layers.LayerTypeTCP {
-				log.Println("Unusable packet")
-				continue
-			}
-			tcp := packet.TransportLayer().(*layers.TCP)
-			assembler.AssembleWithTimestamp(packet.NetworkLayer().NetworkFlow(), tcp, packet.Metadata().Timestamp)
-
-		case <-ticker:
-			// Every minute, flush connections that haven't seen activity in the past minute.
-			log.Println("---- FLUSHING ----")
-			assembler.FlushOlderThan(time.Now().Add(-timeout))
-			streamFactory.collectOldStreams()
+	if *pcapfile != "" {
+		handle, err = pcap.OpenOffline(*pcapfile)
+		if err != nil {
+			log.Fatalf("could not open filename - %v - %s", *pcapfile, err)
+		}
+	} else {
+		if *iface == "" {
+			log.Fatal("Missing interface name")
+		}
+		log.Printf("Starting capture on interface %q", *iface)
+		handle, err = pcap.OpenLive(*iface, defaultSnapLen, true, pcap.BlockForever)
+		if err != nil {
+			panic(err)
 		}
 	}
+
+	defer handle.Close()
+
+	if *filter != "" {
+		if err = handle.SetBPFFilter(*filter); err != nil {
+			log.Fatalf("could not apply filter %v to capture - %s", *filter, err)
+		}
+	}
+
+	source := gopacket.NewPacketSource(handle, handle.LinkType())
+	source.Lazy = false
+	source.NoCopy = true
+	source.DecodeStreamsAsDatagrams = false // Same as default, but i put it here for potential tests
+
+	// Create StreamFactory
+	streamFactory := &tcpStreamFactory{}
+	// Create StreamPool
+	streamPool := reassembly.NewStreamPool(streamFactory)
+	// Create Assembler
+	reassembler := reassembly.NewAssembler(streamPool)
+
+	const closeTimeout time.Duration = time.Hour * 1
+	const timeout time.Duration = time.Minute * 1
+
+	count := 0
+
+	for packet := range source.Packets() {
+
+		count++
+		//Parse Packet
+		if packet == nil {
+			return
+		}
+		if packet.NetworkLayer() == nil || packet.TransportLayer() == nil || packet.TransportLayer().LayerType() != layers.LayerTypeTCP {
+			continue
+		}
+
+		tcp := packet.Layer(layers.LayerTypeTCP)
+
+		if tcp != nil {
+			tcp := tcp.(*layers.TCP)
+			context := Context{
+				CaptureInfo: packet.Metadata().CaptureInfo,
+			}
+			if tcp.SrcPort == 5555 || tcp.DstPort == 5555 {
+				reassembler.AssembleWithContext(packet.NetworkLayer().NetworkFlow(), tcp, &context)
+			}
+		}
+
+		if count%1000 == 0 {
+			timestamp := packet.Metadata().CaptureInfo.Timestamp
+			reassembler.FlushWithOptions(reassembly.FlushOptions{T: timestamp.Add(-timeout), TC: timestamp.Add(-closeTimeout)})
+		}
+	}
+
+	log.Println("iterated all packets")
+
+	reassembler.FlushAll()
+	log.Println("flushed all connections")
+	streamFactory.WaitGoRoutines()
+	log.Println("all go routines finished")
+
 }
