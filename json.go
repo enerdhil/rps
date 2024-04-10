@@ -8,7 +8,8 @@ import (
 
 func parse_json() error {
 
-	value := gjson.Get(jsonString, "@dig:protocolID")
+	value := gjson.Get(jsonString, "messages.#(protocolID=8285)@this")
+
 	// result, err := gabs.ParseJSONFile(jsonfile)
 	// if err != nil {
 	// 	return result, err

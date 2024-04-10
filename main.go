@@ -164,7 +164,6 @@ func (hR *dofusReader) Run(wg *sync.WaitGroup) {
 				break
 			}
 			if *logAllPackets {
-
 				dumpByteSlice(msg.body)
 			}
 		}
@@ -228,7 +227,7 @@ type tcpStreamFactory struct {
 
 func (tSF *tcpStreamFactory) New(netFlow gopacket.Flow, tcpFlow gopacket.Flow, tcp *layers.TCP, ac reassembly.AssemblerContext) reassembly.Stream {
 	fsmOptions := reassembly.TCPSimpleFSMOptions{
-		SupportMissingEstablishment: false,
+		SupportMissingEstablishment: true,
 	}
 
 	stream := &tcpStream{
@@ -236,7 +235,7 @@ func (tSF *tcpStreamFactory) New(netFlow gopacket.Flow, tcpFlow gopacket.Flow, t
 		transport:  tcpFlow,
 		tcpstate:   reassembly.NewTCPSimpleFSM(fsmOptions),
 		optchecker: reassembly.NewTCPOptionCheck(),
-		reversed:   tcp.SrcPort == 80,
+		reversed:   tcp.SrcPort == 5555,
 		ident:      fmt.Sprintf("%s - %s", netFlow, tcpFlow),
 	}
 
