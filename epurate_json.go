@@ -58,11 +58,10 @@ func superRecurse(object Object, root string) (fieldSlice []map[string]interface
 			fieldMap["name"] = field.Name
 			fieldMap["type"] = field.Type
 			fieldMap["isVector"] = field.Is_vector
-			fieldMap["Position"] = field.Position
-			fieldMap["Origine"] = object.Name
+			// fieldMap["Position"] = field.Position
+			// fieldMap["Origine"] = object.Name
 			if field.Constant_length != 0 {
 				fieldMap["constantLength"] = field.Constant_length
-				fmt.Println("constant")
 			}
 			if field.Position != -1 {
 				fieldSlice = append(fieldSlice, fieldMap)
