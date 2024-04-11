@@ -274,9 +274,19 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	log.Println("OH OH OH")
+	err = json_epurate(bytesJSON)
+	if err != nil {
+		log.Fatal(err)
+	}
 	jsonString = string(bytesJSON)
 
 	parse_json()
+	err = json_epurate(bytesJSON)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	if *listInterfaces {
 		ListInterfaces()
