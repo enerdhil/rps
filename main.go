@@ -1,48 +1,18 @@
 package main
 
 import (
-	"bufio"
-	"encoding/binary"
+	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
-	"sync"
+	"reflect"
+	"strings"
 	"time"
 
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
-	"github.com/google/gopacket/pcap"
-	"github.com/google/gopacket/reassembly"
+	"github.com/buger/jsonparser"
+	"github.com/tidwall/gjson"
 )
-
-// Dofus Protocol
-//
-// Standard port is TCP/5555
-//
-// +---------------------+
-// |        Header       |
-// +---------------------+
-// |       Message       |
-// +---------------------+
-//
-//  Dofus Header
-//  0   1   2   3   4   5   6   7   8   9   10  11  12  13  14  15
-//  +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
-//  |                           ProtocolId                  |LenSize|
-//  +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
-//  |             MsgLen            |    MsgLen (if LenSize == 2)   |
-//  +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
-//  |    MsgLen (if LenSize == 3)   |              n/a              |
-//  +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
-//
-//  As we see in the schema, the len of the message is variable in
-//  size. We first need to get LenSize to know on how many bytes we
-//  need to read MsgLen.
-//
-//  If LenSize is 3, the pseudocode to get the value is the following
-//  (uint)(((msgLen1 & 255) << 16) + ((msgLen2 & 255) << 8) + (msgLen3 & 255))
 
 var iface = flag.String("i", "Ethernet", "Interface to get packets from")
 var pcapfile = flag.String("r", "", "Pcap file to read from")
@@ -50,218 +20,170 @@ var filter = flag.String("f", "tcp port 5555", "BPF filter for pcap")
 var listInterfaces = flag.Bool("l", false, "List all interfaces on the system")
 var logAllPackets = flag.Bool("v", false, "Logs every packet in great detail")
 var defaultSnapLen int32 = 262144
-var jsonString string
+var messagesJson, typesJson []byte
 
-type dofusMsg struct {
-	// Header fields
-	ProtocolId uint16
-	LenSize    uint8
-	MsgLen     uint32
+var chatPackets chan dofusMsg
+var havenBagInventoryPackets chan dofusMsg
 
-	body []byte
+// Define structs representing fields and ChatServerMessage
+type MessageField struct {
+	IsVector         bool   `json:"isVector"`
+	Name             string `json:"name"`
+	PrefixedByTypeID bool   `json:"prefixedByTypeID"`
+	Type             string `json:"type"`
+	ReadFunc         string `json:"readFunc"`
+	ConstantLength   int    `json:"constantLength"`
 }
 
-func (dM *dofusMsg) decode(b *bufio.Reader, isClient bool) error {
-	var err error
-
-	// Transform stream to byte slice
-	data, err := b.Peek(2)
-	if err != nil {
-		return err
-	}
-
-	// since there are no further layers, the baselayer's content is
-	// pointing to this layer
-	dM.ProtocolId = binary.BigEndian.Uint16(data[:2]) >> 2
-	dM.LenSize = data[1] & 0x3
-	switch dM.LenSize {
-	case 0:
-		dM.MsgLen = 0
-	case 1:
-		data, err = b.Peek(3)
-		if err != nil {
-			return err
-		}
-		dM.MsgLen = uint32(data[2])
-	case 2:
-		data, err = b.Peek(4)
-		if err != nil {
-			return err
-		}
-		dM.MsgLen = uint32(binary.BigEndian.Uint16(data[2:4]))
-	case 3:
-		data, err = b.Peek(5)
-		if err != nil {
-			return err
-		}
-		dM.MsgLen = uint32((data[2] << 16) + (data[3] << 8) + (data[4]))
-	}
-	if !isClient {
-		if *logAllPackets {
-			log.Println("DofusMsg : ")
-			log.Printf("ProtocolId: %v\n", dM.ProtocolId)
-			log.Printf("LenSize : %v\n", dM.LenSize)
-			log.Printf("MsgLen : %v\n", dM.MsgLen)
-		}
-
-	}
-	b.Discard(int(2 + dM.LenSize))
-	if !isClient {
-		dM.body, err = io.ReadAll(io.LimitReader(b, int64(dM.MsgLen)))
-	} else {
-		b.Discard(int(dM.MsgLen))
-	}
-	if err != nil {
-		return err
-	}
-	return err
+type Schema struct {
+	Fields []MessageField `json:"fields"`
+	Name   string         `json:"name"`
 }
 
-type dofusReader struct {
-	ident    string
-	isClient bool
-	bytes    chan []byte
-	data     []byte
-	parent   *tcpStream
-}
+// func readField(bina)
 
-func (hR *dofusReader) Read(bytes []byte) (int, error) {
-	ok := true
-	for len(hR.data) == 0 && ok {
-		hR.data, ok = <-hR.bytes
+func createStruct(packet dofusMsg) {
+	schemaBytes := gjson.GetBytes(messagesJson, fmt.Sprintf("%v", packet.ProtocolId))
+
+	// Unmarshal the JSON schema into a Schema struct
+	var schema Schema
+	if err := json.Unmarshal([]byte(schemaBytes.Raw), &schema); err != nil {
+		log.Fatal(err)
 	}
-	if !ok || len(hR.data) == 0 {
-		return 0, io.EOF
-	}
-	l := copy(bytes, hR.data)
-	hR.data = hR.data[l:]
-	return l, nil
-}
 
-func (hR *dofusReader) Run(wg *sync.WaitGroup) {
-	defer wg.Done()
-	b := bufio.NewReader(hR)
-	for {
-		if hR.isClient {
-			// log.Println("New packet")
-
-			msg := new(dofusMsg)
-			//Client Request
-			err := msg.decode(b, true)
-			// log.Println("After decode")
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				break
+	// Dynamically create ChatServerMessage struct using reflection
+	var fields []reflect.StructField
+	for _, field := range schema.Fields {
+		var fieldType reflect.Type
+		switch field.Type {
+		case "Boolean":
+			switch field.IsVector {
+			case true:
+				fieldType = reflect.TypeOf([]bool{true})
+			case false:
+				fieldType = reflect.TypeOf(true)
 			}
-			// body, err := io.ReadAll()
-			// log.Printf("Client %v\n", msg)
-		} else {
-
-			msg := new(dofusMsg)
-			//Client Request
-			err := msg.decode(b, false)
-			// log.Println("After decode")
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				break
+		case "String":
+			fieldType = reflect.TypeOf("")
+		case "Number":
+			switch field.IsVector {
+			case true:
+				fmt.Printf("Its a vector")
+				switch field.ReadFunc {
+				case "readDouble":
+					fieldType = reflect.TypeOf([]float64{0})
+				case "readVarLong":
+					fieldType = reflect.TypeOf([]uint64{0})
+				default:
+					log.Fatalf("Unsupported readFunc : %s for type %s field %s", field.ReadFunc, field.Type, field.Name)
+				}
+			case false:
+				switch field.ReadFunc {
+				case "readDouble":
+					fieldType = reflect.TypeOf(float64(0))
+				case "readVarLong":
+					fieldType = reflect.TypeOf(uint64(0))
+				default:
+					log.Fatalf("Unsupported readFunc : %s for type %s field %s", field.ReadFunc, field.Type, field.Name)
+				}
 			}
-			if *logAllPackets {
-				dumpByteSlice(msg.body)
+		case "uint":
+			switch field.ReadFunc {
+			case "readByte":
+				fieldType = reflect.TypeOf(byte('a'))
+			case "readInt":
+				fieldType = reflect.TypeOf(uint32(0))
+			default:
+				log.Fatalf("Unsupported readFunc : %s for type %s field %s", field.ReadFunc, field.Type, field.Name)
 			}
+		// Add other types as needed
+		default:
+			log.Fatalf("Unsupported type: %s for field: %s", field.Type, field.Name)
+		}
+		fields = append(fields, reflect.StructField{
+			Name: strings.Title(field.Name),
+			Type: fieldType,
+		})
+	}
+
+	// Create an instance of ChatServerMessage
+	messageType := reflect.StructOf(fields)
+	instance := reflect.New(messageType).Elem()
+
+	// Example binary packet
+	binaryPacket := packet.body // "Hello" (string) followed by 5 (int)
+
+	// Decode the binary packet according to the dynamic schema
+	offset := 0
+	for i := 0; i < instance.NumField(); i++ {
+		field := instance.Field(i)
+		// fmt.Printf("loop %v, offset: %v\n", i, offset)
+		switch field.Kind() {
+		case reflect.Uint8:
+			value, size := readByte(binaryPacket[offset:])
+			offset += size
+			field.SetUint(uint64(value))
+			fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
+		case reflect.String:
+			value, size := readString(binaryPacket[offset:])
+			offset += size
+			field.SetString(value)
+			fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
+		case reflect.Uint32:
+			value, size := readUnsignedInt(binaryPacket[offset:])
+			offset += size
+			field.SetUint(uint64(value))
+			fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
+		case reflect.Float64:
+			value, size := readDouble(binaryPacket[offset:])
+			offset += size
+			field.SetFloat(value)
+			fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
+		case reflect.Slice:
+			log.Fatalf("Unimplemented type: %s, at index %v\n", field.Kind(), i)
+		default:
+			log.Fatalf("Unimplemented type: %s, at index %v\n", field.Kind(), i)
 		}
 	}
-}
 
-type Context struct {
-	CaptureInfo gopacket.CaptureInfo
-}
-
-func (ac *Context) GetCaptureInfo() gopacket.CaptureInfo {
-	return ac.CaptureInfo
-}
-
-// Implements a reassembly.Stream
-type tcpStream struct {
-	net, transport gopacket.Flow
-	tcpstate       *reassembly.TCPSimpleFSM
-	optchecker     reassembly.TCPOptionCheck
-	reversed       bool
-	client         dofusReader
-	server         dofusReader
-	ident          string
-}
-
-func (tS *tcpStream) Accept(tcp *layers.TCP, ci gopacket.CaptureInfo, dir reassembly.TCPFlowDirection, nextSeq reassembly.Sequence, start *bool, ac reassembly.AssemblerContext) bool {
-	if !tS.tcpstate.CheckState(tcp, dir) {
-		return false
+	time.Sleep(12)
+	// Use the decoded data
+	fmt.Printf("Decoded %v\n", idNameMap[int(packet.ProtocolId)])
+	for i := 0; i < instance.NumField(); i++ {
+		field := instance.Type().Field(i)
+		value := instance.Field(i).Interface()
+		fmt.Printf("%s: %v\n", field.Name, value)
 	}
-	if err := tS.optchecker.Accept(tcp, ci, dir, nextSeq, start); err != nil {
-		return false
-	}
-	return true
+	fmt.Println("===============================")
+	fmt.Printf("Field : %v\n", instance.FieldByName("Content"))
+
 }
 
-func (tS *tcpStream) ReassembledSG(sg reassembly.ScatterGather, ac reassembly.AssemblerContext) {
-	dir, _, _, _ := sg.Info()
-	length, _ := sg.Lengths()
-
-	data := sg.Fetch(length)
-
-	if length > 0 {
-		if dir == reassembly.TCPDirClientToServer && !tS.reversed {
-			tS.client.bytes <- data
-		} else {
-			tS.server.bytes <- data
-		}
+func parseArchi() {
+	for packet := range havenBagInventoryPackets {
+		jsonparser.ArrayEach(messagesJson, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
+			fmt.Println(jsonparser.GetString(value, "name"))
+		}, fmt.Sprintf("%v", packet.ProtocolId), "fields")
 	}
 }
 
-func (tS *tcpStream) ReassemblyComplete(ac reassembly.AssemblerContext) bool {
-	close(tS.client.bytes)
-	close(tS.server.bytes)
-	return false
+func beatbox() {
+	for packet := range chatPackets {
+		fmt.Printf("%v\n", packet.ProtocolId)
+		createStruct(packet)
+	}
 }
 
-// Implements Interface reassembly.StreamFactory
-type tcpStreamFactory struct {
-	wg sync.WaitGroup
-}
-
-func (tSF *tcpStreamFactory) New(netFlow gopacket.Flow, tcpFlow gopacket.Flow, tcp *layers.TCP, ac reassembly.AssemblerContext) reassembly.Stream {
-	fsmOptions := reassembly.TCPSimpleFSMOptions{
-		SupportMissingEstablishment: true,
+func redirectMessage(message dofusMsg) {
+	// fmt.Printf("%v\n", idNameMap[int(message.ProtocolId)])
+	switch messageName := idNameMap[int(message.ProtocolId)]; messageName {
+	// case "ChatServerMessage":
+	// 	fallthrough
+	case "KnownZaapListMessage":
+		chatPackets <- message
+	case "StorageInventoryContentMessage":
+		havenBagInventoryPackets <- message
 	}
-
-	stream := &tcpStream{
-		net:        netFlow,
-		transport:  tcpFlow,
-		tcpstate:   reassembly.NewTCPSimpleFSM(fsmOptions),
-		optchecker: reassembly.NewTCPOptionCheck(),
-		reversed:   tcp.SrcPort == 5555,
-		ident:      fmt.Sprintf("%s - %s", netFlow, tcpFlow),
-	}
-
-	if tcp.SrcPort == 5555 || tcp.DstPort == 5555 {
-		stream.client = dofusReader{
-			ident:    fmt.Sprintf("%s - %s", netFlow, tcpFlow),
-			bytes:    make(chan []byte),
-			isClient: true,
-			parent:   stream,
-		}
-		stream.server = dofusReader{
-			ident:    fmt.Sprintf("%s - %s", netFlow, tcpFlow),
-			bytes:    make(chan []byte),
-			isClient: false,
-			parent:   stream,
-		}
-		tSF.wg.Add(2)
-		go stream.client.Run(&tSF.wg)
-		go stream.server.Run(&tSF.wg)
-	}
-
-	return stream
-}
-
-func (tSF *tcpStreamFactory) WaitGoRoutines() {
-	tSF.wg.Wait()
 }
 
 func main() {
@@ -275,15 +197,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Println("OH OH OH")
-	err = json_epurate(bytesJSON)
-	if err != nil {
-		log.Fatal(err)
-	}
-	jsonString = string(bytesJSON)
-
-	parse_json()
-	err = json_epurate(bytesJSON)
+	messagesJson, typesJson, err = json_epurate(bytesJSON)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -293,83 +207,16 @@ func main() {
 		return
 	}
 
-	var handle *pcap.Handle
+	chatPackets = make(chan dofusMsg)
+	go beatbox()
+	havenBagInventoryPackets = make(chan dofusMsg)
+	go parseArchi()
 
-	if *pcapfile != "" {
-		handle, err = pcap.OpenOffline(*pcapfile)
-		if err != nil {
-			log.Fatalf("could not open filename - %v - %s", *pcapfile, err)
-		}
-	} else {
-		if *iface == "" {
-			log.Fatal("Missing interface name")
-		}
-		log.Printf("Starting capture on interface %q", *iface)
-		handle, err = pcap.OpenLive(*iface, defaultSnapLen, true, pcap.BlockForever)
-		if err != nil {
-			panic(err)
-		}
-	}
+	handlePackets()
 
-	defer handle.Close()
+	// fmpackets := make(chan int)
 
-	if *filter != "" {
-		if err = handle.SetBPFFilter(*filter); err != nil {
-			log.Fatalf("could not apply filter %v to capture - %s", *filter, err)
-		}
-	}
-
-	source := gopacket.NewPacketSource(handle, handle.LinkType())
-	source.Lazy = false
-	source.NoCopy = true
-	source.DecodeStreamsAsDatagrams = false // Same as default, but i put it here for potential tests
-
-	// Create StreamFactory
-	streamFactory := &tcpStreamFactory{}
-	// Create StreamPool
-	streamPool := reassembly.NewStreamPool(streamFactory)
-	// Create Assembler
-	reassembler := reassembly.NewAssembler(streamPool)
-
-	const closeTimeout time.Duration = time.Hour * 1
-	const timeout time.Duration = time.Minute * 1
-
-	count := 0
-
-	for packet := range source.Packets() {
-
-		count++
-		//Parse Packet
-		if packet == nil {
-			return
-		}
-		if packet.NetworkLayer() == nil || packet.TransportLayer() == nil || packet.TransportLayer().LayerType() != layers.LayerTypeTCP {
-			continue
-		}
-
-		tcp := packet.Layer(layers.LayerTypeTCP)
-
-		if tcp != nil {
-			tcp := tcp.(*layers.TCP)
-			context := Context{
-				CaptureInfo: packet.Metadata().CaptureInfo,
-			}
-			if tcp.SrcPort == 5555 || tcp.DstPort == 5555 {
-				reassembler.AssembleWithContext(packet.NetworkLayer().NetworkFlow(), tcp, &context)
-			}
-		}
-
-		if count%1000 == 0 {
-			timestamp := packet.Metadata().CaptureInfo.Timestamp
-			reassembler.FlushWithOptions(reassembly.FlushOptions{T: timestamp.Add(-timeout), TC: timestamp.Add(-closeTimeout)})
-		}
-	}
-
-	log.Println("iterated all packets")
-
-	reassembler.FlushAll()
-	log.Println("flushed all connections")
-	streamFactory.WaitGoRoutines()
-	log.Println("all go routines finished")
+	// go combat(combatpackets)
+	// go fm(fmpackets)
 
 }

@@ -4,10 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
 )
 
 var data map[string][]Object
+
+// Create a ProtocolID = "MessageName" map
+var idNameMap map[int]string
+
+// Create a "MessageName"= ProtocolID map
+var nameIdMap map[string]int
 
 type Bounds struct {
 	Low string `json:"low"`
@@ -48,7 +53,6 @@ type Object struct {
 
 func superRecurse(object Object, root string) (fieldSlice []map[string]interface{}) {
 	for i := 0; i < len(object.Fields); i++ {
-
 		for _, field := range object.Fields {
 			if field.Position != i {
 				continue
@@ -58,11 +62,16 @@ func superRecurse(object Object, root string) (fieldSlice []map[string]interface
 			fieldMap["name"] = field.Name
 			fieldMap["type"] = field.Type
 			fieldMap["isVector"] = field.Is_vector
-			// fieldMap["Position"] = field.Position
-			// fieldMap["Origine"] = object.Name
+			fieldMap["prefixedByTypeID"] = field.Prefixed_by_type_id
+
+			if field.Write_method != "" {
+				fieldMap["readFunc"] = "read" + field.Write_method[5:]
+			}
+
 			if field.Constant_length != 0 {
 				fieldMap["constantLength"] = field.Constant_length
 			}
+
 			if field.Position != -1 {
 				fieldSlice = append(fieldSlice, fieldMap)
 			}
@@ -79,65 +88,71 @@ func superRecurse(object Object, root string) (fieldSlice []map[string]interface
 	return fieldSlice
 }
 
-func json_epurate(jsonBytes []byte) error {
-
-	if err := json.Unmarshal(jsonBytes, &data); err != nil {
+func json_epurate(jsonBytes []byte) ([]byte, []byte, error) {
+	var err error
+	if err = json.Unmarshal(jsonBytes, &data); err != nil {
 		panic(err)
 	}
 
-	// Create a "MessageName"= ProtocolID map
-	idNameMap := make(map[string]int)
+	nameIdMap = make(map[string]int)
+	idNameMap = make(map[int]string)
 	messages := make(map[string]map[string]interface{})
 	types := make(map[string]map[string]interface{})
 
 	for root, output := range map[string]map[string]map[string]interface{}{"messages": messages, "types": types} {
 		for _, obj := range data[root] {
 			var fieldSlice []map[string]interface{}
-			// Fill the "Name"= ProtocolID map
-			idNameMap[obj.Name] = obj.ProtocolID
+			// Fill the ProtocolID="Name" map
+			idNameMap[obj.ProtocolID] = obj.Name
+			// Fill the "Name"=ProtocolID map
+			nameIdMap[obj.Name] = obj.ProtocolID
 
 			// Make objects without the unnecessary data
 			messageMap := make(map[string]interface{})
 
 			fieldSlice = superRecurse(obj, root)
 
-			for index, field := range fieldSlice {
-				messageMap[fmt.Sprintf("%d", index)] = field
-			}
+			messageMap["fields"] = fieldSlice
+			// for index, field := range fieldSlice {
+			// 	messageMap[fmt.Sprintf("%d", index)] = field
+			// }
 			messageMap["name"] = obj.Name
 			output[fmt.Sprintf("%d", obj.ProtocolID)] = messageMap
 		}
-	}
 
-	for _, message := range messages {
-		for i := 0; i < len(message)-1; i++ {
-			field := message[strconv.Itoa(i)]
-			typeName := field.(map[string]interface{})["type"].(string)
-			typeId := idNameMap[typeName]
-			if typeId > 0 {
-				if types[strconv.Itoa(typeId)] != nil {
-					field.(map[string]interface{})["typedef"] = types[strconv.Itoa(typeId)]
-				}
-			}
+		jsonOutput, err := json.MarshalIndent(output, "", "    ")
+		if err != nil {
+			panic(err)
 		}
+
+		file, err := os.Create(fmt.Sprintf("result_%v.json", root))
+		if err != nil {
+			panic(err)
+		}
+		defer file.Close()
+
+		_, err = file.Write(jsonOutput)
+		if err != nil {
+			panic(err)
+		}
+
 	}
 
-	result, err := json.MarshalIndent(messages, "", "    ")
-	if err != nil {
-		panic(err)
-	}
-
-	file, err := os.Create("result.json")
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-
-	_, err = file.Write(result)
-	if err != nil {
-		panic(err)
-	}
+	// for _, message := range messages {
+	// 	for i := 0; i < len(message)-1; i++ {
+	// 		field := message[strconv.Itoa(i)]
+	// 		typeName := field.(map[string]interface{})["type"].(string)
+	// 		typeId := idNameMap[typeName]
+	// 		if typeId > 0 {
+	// 			if types[strconv.Itoa(typeId)] != nil {
+	// 				field.(map[string]interface{})["typedef"] = types[strconv.Itoa(typeId)]
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	// fmt.Println(string(result))
-	return err
+	messagesString, _ := json.Marshal(messages)
+	typesString, _ := json.Marshal(types)
+	return messagesString, typesString, err
 }
