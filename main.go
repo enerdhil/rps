@@ -8,9 +8,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
-	"time"
 
-	"github.com/buger/jsonparser"
 	"github.com/tidwall/gjson"
 )
 
@@ -40,7 +38,91 @@ type Schema struct {
 	Name   string         `json:"name"`
 }
 
-// func readField(bina)
+func readVector(binaryMsg []byte, field reflect.Value) (sizeRead int) {
+
+	vectorSize, sizeRead := readUnsignedShort(binaryMsg)
+
+	fmt.Printf("Vector: %v\n", field.Type().String())
+
+	// Ensure field is a slice
+	if field.Kind() != reflect.Slice {
+		log.Fatalf("ReadVector: Field is not a slice")
+	}
+
+	// Create a new slice to hold the values
+	sliceType := field.Type().Elem()
+	newSlice := reflect.MakeSlice(field.Type(), int(vectorSize), int(vectorSize))
+
+	for i := 0; i < int(vectorSize); i++ {
+		switch sliceType {
+		case reflect.TypeOf(uint8(0)):
+			value, size := readByte(binaryMsg[sizeRead:])
+			sizeRead += size
+			newSlice.Index(i).SetUint(uint64(value))
+			fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
+		case reflect.TypeOf(string("")):
+			value, size := readString(binaryMsg[sizeRead:])
+			sizeRead += size
+			newSlice.Index(i).SetString(value)
+			fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
+		case reflect.TypeOf(uint32(0)):
+			value, size := readUnsignedInt(binaryMsg[sizeRead:])
+			sizeRead += size
+			newSlice.Index(i).SetUint(uint64(value))
+			fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
+		case reflect.TypeOf(int32(0)):
+			value, size := readInt(binaryMsg[sizeRead:])
+			sizeRead += size
+			newSlice.Index(i).SetInt(int64(value))
+			fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
+		case reflect.TypeOf(float64(0.0)):
+			value, size := readDouble(binaryMsg[sizeRead:])
+			sizeRead += size
+			newSlice.Index(i).SetFloat(value)
+			fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
+		default:
+			log.Fatalf("ReadVector: Unimplemented type: %s, at index\n", field.Type().String())
+		}
+	}
+
+	// Set the new slice to the field
+	field.Set(newSlice)
+
+	return sizeRead
+}
+
+func readField(binaryMsg []byte, field reflect.Value) (sizeRead int) {
+	switch field.Kind() {
+	case reflect.Uint8:
+		value, size := readByte(binaryMsg)
+		sizeRead = size
+		field.SetUint(uint64(value))
+		fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
+	case reflect.String:
+		value, size := readString(binaryMsg)
+		sizeRead = size
+		field.SetString(value)
+		fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
+	case reflect.Uint32:
+		value, size := readUnsignedInt(binaryMsg)
+		sizeRead = size
+		field.SetUint(uint64(value))
+		fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
+	case reflect.Int32:
+		value, size := readInt(binaryMsg)
+		sizeRead = size
+		field.SetInt(int64(value))
+		fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
+	case reflect.Float64:
+		value, size := readDouble(binaryMsg)
+		sizeRead = size
+		field.SetFloat(value)
+		fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
+	default:
+		log.Fatalf("Unimplemented type: %s, at index\n", field.Kind())
+	}
+	return
+}
 
 func createStruct(packet dofusMsg) {
 	schemaBytes := gjson.GetBytes(messagesJson, fmt.Sprintf("%v", packet.ProtocolId))
@@ -51,58 +133,13 @@ func createStruct(packet dofusMsg) {
 		log.Fatal(err)
 	}
 
-	// Dynamically create ChatServerMessage struct using reflection
+	// Dynamically create Message struct using reflection
 	var fields []reflect.StructField
+	//var fieldIndexMethodMap map[int]string
 	for _, field := range schema.Fields {
-		var fieldType reflect.Type
-		switch field.Type {
-		case "Boolean":
-			switch field.IsVector {
-			case true:
-				fieldType = reflect.TypeOf([]bool{true})
-			case false:
-				fieldType = reflect.TypeOf(true)
-			}
-		case "String":
-			fieldType = reflect.TypeOf("")
-		case "Number":
-			switch field.IsVector {
-			case true:
-				fmt.Printf("Its a vector")
-				switch field.ReadFunc {
-				case "readDouble":
-					fieldType = reflect.TypeOf([]float64{0})
-				case "readVarLong":
-					fieldType = reflect.TypeOf([]uint64{0})
-				default:
-					log.Fatalf("Unsupported readFunc : %s for type %s field %s", field.ReadFunc, field.Type, field.Name)
-				}
-			case false:
-				switch field.ReadFunc {
-				case "readDouble":
-					fieldType = reflect.TypeOf(float64(0))
-				case "readVarLong":
-					fieldType = reflect.TypeOf(uint64(0))
-				default:
-					log.Fatalf("Unsupported readFunc : %s for type %s field %s", field.ReadFunc, field.Type, field.Name)
-				}
-			}
-		case "uint":
-			switch field.ReadFunc {
-			case "readByte":
-				fieldType = reflect.TypeOf(byte('a'))
-			case "readInt":
-				fieldType = reflect.TypeOf(uint32(0))
-			default:
-				log.Fatalf("Unsupported readFunc : %s for type %s field %s", field.ReadFunc, field.Type, field.Name)
-			}
-		// Add other types as needed
-		default:
-			log.Fatalf("Unsupported type: %s for field: %s", field.Type, field.Name)
-		}
 		fields = append(fields, reflect.StructField{
 			Name: strings.Title(field.Name),
-			Type: fieldType,
+			Type: getFieldType(field),
 		})
 	}
 
@@ -118,52 +155,31 @@ func createStruct(packet dofusMsg) {
 	for i := 0; i < instance.NumField(); i++ {
 		field := instance.Field(i)
 		// fmt.Printf("loop %v, offset: %v\n", i, offset)
-		switch field.Kind() {
-		case reflect.Uint8:
-			value, size := readByte(binaryPacket[offset:])
-			offset += size
-			field.SetUint(uint64(value))
-			fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
-		case reflect.String:
-			value, size := readString(binaryPacket[offset:])
-			offset += size
-			field.SetString(value)
-			fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
-		case reflect.Uint32:
-			value, size := readUnsignedInt(binaryPacket[offset:])
-			offset += size
-			field.SetUint(uint64(value))
-			fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
-		case reflect.Float64:
-			value, size := readDouble(binaryPacket[offset:])
-			offset += size
-			field.SetFloat(value)
-			fmt.Printf("Added %v value: %v\n", reflect.TypeOf(value), value)
-		case reflect.Slice:
-			log.Fatalf("Unimplemented type: %s, at index %v\n", field.Kind(), i)
-		default:
-			log.Fatalf("Unimplemented type: %s, at index %v\n", field.Kind(), i)
+		if field.Kind() == reflect.Slice {
+			fmt.Printf("%v\n", field.Type())
+			offset += readVector(binaryPacket[offset:], field)
+		} else {
+			offset += readField(binaryPacket[offset:], field)
 		}
+
 	}
 
-	time.Sleep(12)
 	// Use the decoded data
-	fmt.Printf("Decoded %v\n", idNameMap[int(packet.ProtocolId)])
+	fmt.Printf("Decoded %v (packetsize:%d, read:%d)\n", idNameMap[int(packet.ProtocolId)], len(binaryPacket), offset)
 	for i := 0; i < instance.NumField(); i++ {
 		field := instance.Type().Field(i)
 		value := instance.Field(i).Interface()
 		fmt.Printf("%s: %v\n", field.Name, value)
 	}
 	fmt.Println("===============================")
-	fmt.Printf("Field : %v\n", instance.FieldByName("Content"))
+	//fmt.Printf("Field : %v\n", instance.FieldByName("Content"))
 
 }
 
 func parseArchi() {
 	for packet := range havenBagInventoryPackets {
-		jsonparser.ArrayEach(messagesJson, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
-			fmt.Println(jsonparser.GetString(value, "name"))
-		}, fmt.Sprintf("%v", packet.ProtocolId), "fields")
+		fmt.Printf("%v\n", packet.ProtocolId)
+		createStruct(packet)
 	}
 }
 
@@ -177,8 +193,8 @@ func beatbox() {
 func redirectMessage(message dofusMsg) {
 	// fmt.Printf("%v\n", idNameMap[int(message.ProtocolId)])
 	switch messageName := idNameMap[int(message.ProtocolId)]; messageName {
-	// case "ChatServerMessage":
-	// 	fallthrough
+	case "ChatServerMessage":
+		fallthrough
 	case "KnownZaapListMessage":
 		chatPackets <- message
 	case "StorageInventoryContentMessage":
@@ -214,6 +230,9 @@ func main() {
 
 	handlePackets()
 
+	for true {
+
+	}
 	// fmpackets := make(chan int)
 
 	// go combat(combatpackets)
