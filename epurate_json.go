@@ -9,10 +9,10 @@ import (
 var data map[string][]Object
 
 // Create a ProtocolID = "MessageName" map
-var idNameMap map[int]string
+var idNameMap map[uint16]string
 
 // Create a "MessageName"= ProtocolID map
-var nameIdMap map[string]int
+var nameIdMap map[string]uint16
 
 type Bounds struct {
 	Low string `json:"low"`
@@ -44,7 +44,7 @@ type Object struct {
 	Fields            []Field `json:"fields"`
 	Name              string  `json:"name"`
 	Namespace         string  `json:"namespace"`
-	ProtocolID        int     `json:"protocolID"`
+	ProtocolID        uint16  `json:"protocolID"`
 	Super             string  `json:"super"`
 	Super_serialize   bool    `json:"super_serialize"`
 	Supernamespace    string  `json:"supernamespace"`
@@ -94,8 +94,8 @@ func json_epurate(jsonBytes []byte) ([]byte, []byte, error) {
 		panic(err)
 	}
 
-	nameIdMap = make(map[string]int)
-	idNameMap = make(map[int]string)
+	nameIdMap = make(map[string]uint16)
+	idNameMap = make(map[uint16]string)
 	messages := make(map[string]map[string]interface{})
 	types := make(map[string]map[string]interface{})
 

@@ -90,7 +90,7 @@ func (dM *dofusMsg) decode(b *bufio.Reader) error {
 	if *logAllPackets {
 		log.Println("DofusMsg : ")
 		log.Printf("ProtocolId: %v\n", dM.ProtocolId)
-		log.Printf("ProtocolName: %v\n", idNameMap[int(dM.ProtocolId)])
+		log.Printf("ProtocolName: %v\n", idNameMap[dM.ProtocolId])
 		log.Printf("LenSize : %v\n", dM.LenSize)
 		log.Printf("MsgLen : %v\n", dM.MsgLen)
 	}
