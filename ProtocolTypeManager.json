@@ -1,0 +1,605 @@
+{
+  "130": {
+    "name": "SurrenderResponse"
+  },
+  "148": {
+    "name": "GuildPlayerFlowActivity"
+  },
+  "192": {
+    "name": "FightResultPvpData"
+  },
+  "232": {
+    "name": "SkillActionDescriptionTimed"
+  },
+  "266": {
+    "name": "PartyEntityMemberInformation"
+  },
+  "269": {
+    "name": "PrismInformation"
+  },
+  "273": {
+    "name": "FightTemporarySpellImmunityEffect"
+  },
+  "292": {
+    "name": "GameFightFighterNamedLightInformations"
+  },
+  "303": {
+    "name": "GuildRankActivity"
+  },
+  "345": {
+    "name": "InteractiveElementNamedSkill"
+  },
+  "385": {
+    "name": "GameFightFighterEntityLightInformation"
+  },
+  "417": {
+    "name": "TaxCollectorComplementaryInformations"
+  },
+  "456": {
+    "name": "GameFightFighterInformations"
+  },
+  "476": {
+    "name": "FriendOnlineInformations"
+  },
+  "528": {
+    "name": "GameFightFighterTaxCollectorLightInformations"
+  },
+  "538": {
+    "name": "TreasureHuntStepFight"
+  },
+  "620": {
+    "name": "HumanOptionEmote"
+  },
+  "650": {
+    "name": "UpdateMountBooleanCharacteristic"
+  },
+  "658": {
+    "name": "FightResultAdditionalData"
+  },
+  "677": {
+    "name": "ServerSessionConstantInteger"
+  },
+  "874": {
+    "name": "FightTeamMemberTaxCollectorInformations"
+  },
+  "938": {
+    "name": "Shortcut"
+  },
+  "969": {
+    "name": "CharacterHardcoreOrEpicInformations"
+  },
+  "998": {
+    "name": "StatsPreset"
+  },
+  "1037": {
+    "name": "PartyEntityBaseInformation"
+  },
+  "1117": {
+    "name": "BasicNamedAllianceInformations"
+  },
+  "1155": {
+    "name": "FightDetailedTemporaryBoostEffect"
+  },
+  "1183": {
+    "name": "ShortcutSpell"
+  },
+  "1233": {
+    "name": "SpawnInformation"
+  },
+  "1255": {
+    "name": "GameContextSummonsInformation"
+  },
+  "1335": {
+    "name": "QuestActiveInformations"
+  },
+  "1387": {
+    "name": "FightResultPlayerListEntry"
+  },
+  "1391": {
+    "name": "FriendSpouseOnlineInformations"
+  },
+  "1397": {
+    "name": "ShortcutObjectItem"
+  },
+  "1446": {
+    "name": "MapCoordinates"
+  },
+  "1529": {
+    "name": "PrismGeolocalizedInformation"
+  },
+  "1546": {
+    "name": "ForgettableSpellsPreset"
+  },
+  "1784": {
+    "name": "GuildLogbookChestActivity"
+  },
+  "1799": {
+    "name": "SurrenderRefusedBeforeVote"
+  },
+  "1832": {
+    "name": "HumanOptionAlliance"
+  },
+  "1844": {
+    "name": "EntityDispositionInformations"
+  },
+  "1952": {
+    "name": "GroupMonsterStaticInformations"
+  },
+  "1987": {
+    "name": "HouseInformations"
+  },
+  "2004": {
+    "name": "GameContextBasicSpawnInformation"
+  },
+  "2028": {
+    "name": "GuildUnlockNewTabActivity"
+  },
+  "2052": {
+    "name": "AlliancePrismInformation"
+  },
+  "2054": {
+    "name": "FightTemporaryBoostStateEffect"
+  },
+  "2135": {
+    "name": "UpdateMountIntegerCharacteristic"
+  },
+  "2153": {
+    "name": "HumanOptionTitle"
+  },
+  "2267": {
+    "name": "SurrenderVoteRefused"
+  },
+  "2302": {
+    "name": "FightResultTaxCollectorListEntry"
+  },
+  "2305": {
+    "name": "PaddockGuildedInformations"
+  },
+  "2371": {
+    "name": "TaxCollectorStaticInformations"
+  },
+  "2431": {
+    "name": "HumanOptionSkillUse"
+  },
+  "2561": {
+    "name": "PortalInformation"
+  },
+  "2567": {
+    "name": "SkillActionDescriptionCraft"
+  },
+  "2601": {
+    "name": "SpellsPreset"
+  },
+  "2748": {
+    "name": "DebtInformation"
+  },
+  "2881": {
+    "name": "CharacterCharacteristicDetailed"
+  },
+  "2902": {
+    "name": "SkillActionDescription"
+  },
+  "2923": {
+    "name": "InteractiveElementWithAgeBonus"
+  },
+  "2966": {
+    "name": "QuestObjectiveInformationsWithCompletion"
+  },
+  "2989": {
+    "name": "FriendSpouseInformations"
+  },
+  "3023": {
+    "name": "KamaDebtInformation"
+  },
+  "3053": {
+    "name": "ShortcutSmiley"
+  },
+  "3054": {
+    "name": "FightTeamInformations"
+  },
+  "3061": {
+    "name": "FightTemporaryBoostEffect"
+  },
+  "3111": {
+    "name": "ObjectEffectDate"
+  },
+  "3163": {
+    "name": "HumanOptionSpeedMultiplier"
+  },
+  "3193": {
+    "name": "IgnoredOnlineInformations"
+  },
+  "3228": {
+    "name": "GameContextActorPositionInformations"
+  },
+  "3270": {
+    "name": "IconNamedPreset"
+  },
+  "3328": {
+    "name": "ItemsPreset"
+  },
+  "3347": {
+    "name": "TaxCollectorInformations"
+  },
+  "3535": {
+    "name": "FightResultListEntry"
+  },
+  "3539": {
+    "name": "GuildLogbookEntryBasicInformation"
+  },
+  "3603": {
+    "name": "GameFightAIInformations"
+  },
+  "3605": {
+    "name": "GameFightCharacteristics"
+  },
+  "3632": {
+    "name": "QuestObjectiveInformations"
+  },
+  "3663": {
+    "name": "BreachBranch"
+  },
+  "3675": {
+    "name": "StatisticDataShort"
+  },
+  "3706": {
+    "name": "CharacterCharacteristic"
+  },
+  "3722": {
+    "name": "TreasureHuntStepDig"
+  },
+  "3781": {
+    "name": "FightTeamMemberCharacterInformations"
+  },
+  "3826": {
+    "name": "GameFightTaxCollectorInformations"
+  },
+  "3883": {
+    "name": "FightTeamMemberEntityInformation"
+  },
+  "3942": {
+    "name": "HouseInstanceInformations"
+  },
+  "4258": {
+    "name": "HouseInformationsInside"
+  },
+  "4381": {
+    "name": "CharacterBaseInformations"
+  },
+  "4484": {
+    "name": "HouseGuildedInformations"
+  },
+  "4561": {
+    "name": "SkillActionDescriptionCollect"
+  },
+  "4812": {
+    "name": "GameFightFighterLightInformations"
+  },
+  "4842": {
+    "name": "GameFightMonsterWithAlignmentInformations"
+  },
+  "4903": {
+    "name": "StatisticDataByte"
+  },
+  "4988": {
+    "name": "StatisticData"
+  },
+  "4998": {
+    "name": "ShortcutEntitiesPreset"
+  },
+  "5013": {
+    "name": "Preset"
+  },
+  "5049": {
+    "name": "BaseSpawnMonsterInformation"
+  },
+  "5056": {
+    "name": "StatisticDataString"
+  },
+  "5097": {
+    "name": "ObjectEffectDice"
+  },
+  "5116": {
+    "name": "ObjectEffectDuration"
+  },
+  "5204": {
+    "name": "SurrenderVoteRefusedAlreadyAsked"
+  },
+  "5239": {
+    "name": "AcquaintanceInformation"
+  },
+  "5248": {
+    "name": "AbstractFightDispellableEffect"
+  },
+  "5329": {
+    "name": "PresetsContainerPreset"
+  },
+  "5383": {
+    "name": "SurrenderAccepted"
+  },
+  "5403": {
+    "name": "EntitiesPreset"
+  },
+  "5455": {
+    "name": "AllianceFactSheetInformation"
+  },
+  "5462": {
+    "name": "GameFightFighterNamedInformations"
+  },
+  "5503": {
+    "name": "FightResultMutantListEntry"
+  },
+  "5676": {
+    "name": "SpawnCompanionInformation"
+  },
+  "5722": {
+    "name": "ObjectEffectInteger"
+  },
+  "5742": {
+    "name": "PlayerStatusExtended"
+  },
+  "5821": {
+    "name": "ShortcutObject"
+  },
+  "5840": {
+    "name": "SpawnMonsterInformation"
+  },
+  "5892": {
+    "name": "FightTemporarySpellBoostEffect"
+  },
+  "5896": {
+    "name": "StatisticDataInt"
+  },
+  "5954": {
+    "name": "SpawnScaledMonsterInformation"
+  },
+  "6006": {
+    "name": "InteractiveElement"
+  },
+  "6092": {
+    "name": "FightTeamMemberInformations"
+  },
+  "6103": {
+    "name": "FightEntityDispositionInformations"
+  },
+  "6128": {
+    "name": "AchievementAchieved"
+  },
+  "6157": {
+    "name": "FriendInformations"
+  },
+  "6159": {
+    "name": "SurrenderVoteAccepted"
+  },
+  "6319": {
+    "name": "HumanOptionGuild"
+  },
+  "6359": {
+    "name": "AchievementAchievedRewardable"
+  },
+  "6387": {
+    "name": "AllianceInsiderPrismInformation"
+  },
+  "6443": {
+    "name": "HouseOnMapInformations"
+  },
+  "6457": {
+    "name": "ObjectEffectMinMax"
+  },
+  "6487": {
+    "name": "CharacterUsableCharacteristicDetailed"
+  },
+  "6499": {
+    "name": "TreasureHuntStepFollowDirectionToPOI"
+  },
+  "6565": {
+    "name": "AcquaintanceOnlineInformation"
+  },
+  "6579": {
+    "name": "IdentifiedEntityDispositionInformations"
+  },
+  "6604": {
+    "name": "UpdateMountCharacteristic"
+  },
+  "6618": {
+    "name": "GameFightMutantInformations"
+  },
+  "6649": {
+    "name": "IgnoredInformations"
+  },
+  "6723": {
+    "name": "TreasureHuntStepFollowDirection"
+  },
+  "6762": {
+    "name": "HumanOptionObjectUse"
+  },
+  "6764": {
+    "name": "SurrenderVoteRefusedWaitBetweenVotes"
+  },
+  "6905": {
+    "name": "ObjectEffectLadder"
+  },
+  "6911": {
+    "name": "PlayerStatus"
+  },
+  "6967": {
+    "name": "SurrenderRefused"
+  },
+  "6999": {
+    "name": "PlayerSearchTagInformation"
+  },
+  "7033": {
+    "name": "HumanOptionFollowers"
+  },
+  "7095": {
+    "name": "HouseInformationsForGuild"
+  },
+  "7120": {
+    "name": "PartyMemberInformations"
+  },
+  "7125": {
+    "name": "GuildInformations"
+  },
+  "7132": {
+    "name": "StatisticDataBoolean"
+  },
+  "7243": {
+    "name": "FightTriggeredEffect"
+  },
+  "7267": {
+    "name": "HumanOption"
+  },
+  "7430": {
+    "name": "BasicAllianceInformations"
+  },
+  "7519": {
+    "name": "SurrenderVoteResponse"
+  },
+  "7593": {
+    "name": "PaddockBuyableInformations"
+  },
+  "7716": {
+    "name": "GroupMonsterStaticInformationsWithAlternatives"
+  },
+  "7729": {
+    "name": "TreasureHuntStep"
+  },
+  "7791": {
+    "name": "TaxCollectorLootInformations"
+  },
+  "7800": {
+    "name": "FullStatsPreset"
+  },
+  "7813": {
+    "name": "GuildPlayerRankUpdateActivity"
+  },
+  "7835": {
+    "name": "AbstractPlayerSearchInformation"
+  },
+  "7839": {
+    "name": "ObjectEffectMount"
+  },
+  "7900": {
+    "name": "ServerSessionConstantLong"
+  },
+  "7906": {
+    "name": "ObjectEffectCreature"
+  },
+  "7935": {
+    "name": "AbstractSocialGroupInfos"
+  },
+  "7988": {
+    "name": "FightTeamMemberWithAllianceCharacterInformations"
+  },
+  "8078": {
+    "name": "PartyInvitationMemberInformations"
+  },
+  "8087": {
+    "name": "ShortcutObjectPreset"
+  },
+  "8107": {
+    "name": "AccountHouseInformations"
+  },
+  "8140": {
+    "name": "FightAllianceTeamInformations"
+  },
+  "8213": {
+    "name": "GuildPaddockActivity"
+  },
+  "8220": {
+    "name": "GameFightEntityInformation"
+  },
+  "8223": {
+    "name": "FightResultFighterListEntry"
+  },
+  "8303": {
+    "name": "PlayerSearchCharacterNameInformation"
+  },
+  "8346": {
+    "name": "TreasureHuntStepFollowDirectionToHint"
+  },
+  "8362": {
+    "name": "PartyMemberArenaInformations"
+  },
+  "8414": {
+    "name": "TaxCollectorWaitingForHelpInformations"
+  },
+  "8417": {
+    "name": "ChallengeTargetWithAttackerInformation"
+  },
+  "8504": {
+    "name": "FightTemporaryBoostWeaponDamagesEffect"
+  },
+  "8719": {
+    "name": "QuestActiveDetailedInformations"
+  },
+  "8764": {
+    "name": "ShortcutEmote"
+  },
+  "8828": {
+    "name": "ServerSessionConstantString"
+  },
+  "8837": {
+    "name": "ObjectEffectString"
+  },
+  "8853": {
+    "name": "ObjectEffect"
+  },
+  "8865": {
+    "name": "SpawnCharacterInformation"
+  },
+  "8927": {
+    "name": "GameFightFighterMonsterLightInformations"
+  },
+  "8948": {
+    "name": "ChallengeTargetInformation"
+  },
+  "8975": {
+    "name": "GuildLevelUpActivity"
+  },
+  "9037": {
+    "name": "BasicGuildInformations"
+  },
+  "9107": {
+    "name": "FightTeamMemberMonsterInformations"
+  },
+  "9203": {
+    "name": "SurrenderVoteRefusedBeforeTurn"
+  },
+  "9229": {
+    "name": "AllianceInformation"
+  },
+  "9334": {
+    "name": "FightResultExperienceData"
+  },
+  "9374": {
+    "name": "GameFightCharacterInformations"
+  },
+  "9415": {
+    "name": "InteractiveElementSkill"
+  },
+  "9503": {
+    "name": "SurrenderRefusedBeforeTurn"
+  },
+  "9666": {
+    "name": "MapCoordinatesAndId"
+  },
+  "9677": {
+    "name": "MapCoordinatesExtended"
+  },
+  "9684": {
+    "name": "CharacterCharacteristicValue"
+  },
+  "9745": {
+    "name": "HumanOptionOrnament"
+  },
+  "9794": {
+    "name": "HumanInformations"
+  },
+  "9878": {
+    "name": "GameFightMonsterInformations"
+  },
+  "9924": {
+    "name": "ServerSessionConstant"
+  }
+}

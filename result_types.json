@@ -12204,14 +12204,14 @@
                 "isVector": true,
                 "name": "runesId",
                 "prefixedByTypeID": false,
-                "readFunc": "readVarInt",
+                "readFunc": "readVarShort",
                 "type": "uint"
             },
             {
                 "isVector": true,
                 "name": "runesQty",
                 "prefixedByTypeID": false,
-                "readFunc": "readVarInt",
+                "readFunc": "readVarShort",
                 "type": "uint"
             }
         ],

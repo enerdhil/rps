@@ -106226,7 +106226,7 @@
           "use_boolean_byte_wrapper": false,
           "write_false_if_null_method": "",
           "write_length_method": "writeShort",
-          "write_method": "writeVarInt",
+          "write_method": "writeVarShort",
           "write_type_id_method": ""
         },
         {
@@ -106268,7 +106268,7 @@
           "use_boolean_byte_wrapper": false,
           "write_false_if_null_method": "",
           "write_length_method": "writeShort",
-          "write_method": "writeVarInt",
+          "write_method": "writeVarShort",
           "write_type_id_method": ""
         },
         {

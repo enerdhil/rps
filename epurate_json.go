@@ -109,13 +109,8 @@ func json_epurate(jsonBytes []byte) ([]byte, []byte, error) {
 
 			// Make objects without the unnecessary data
 			messageMap := make(map[string]interface{})
-
 			fieldSlice = superRecurse(obj, root)
-
 			messageMap["fields"] = fieldSlice
-			// for index, field := range fieldSlice {
-			// 	messageMap[fmt.Sprintf("%d", index)] = field
-			// }
 			messageMap["name"] = obj.Name
 			output[fmt.Sprintf("%d", obj.ProtocolID)] = messageMap
 		}
@@ -138,20 +133,6 @@ func json_epurate(jsonBytes []byte) ([]byte, []byte, error) {
 
 	}
 
-	// for _, message := range messages {
-	// 	for i := 0; i < len(message)-1; i++ {
-	// 		field := message[strconv.Itoa(i)]
-	// 		typeName := field.(map[string]interface{})["type"].(string)
-	// 		typeId := idNameMap[typeName]
-	// 		if typeId > 0 {
-	// 			if types[strconv.Itoa(typeId)] != nil {
-	// 				field.(map[string]interface{})["typedef"] = types[strconv.Itoa(typeId)]
-	// 			}
-	// 		}
-	// 	}
-	// }
-
-	// fmt.Println(string(result))
 	messagesString, _ := json.Marshal(messages)
 	typesString, _ := json.Marshal(types)
 	return messagesString, typesString, err

@@ -68,7 +68,7 @@ func getFieldType(field MessageField) (fieldType reflect.Type) {
 		case "readDouble":
 			fallthrough
 		case "readFloat":
-			fieldType = reflect.TypeOf(float64(0))
+			fieldType = reflect.TypeOf(int32(0))
 		case "readVarLong":
 			fieldType = reflect.TypeOf(uint64(0))
 		default:
